@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-COMPLETE DAILY MARKET INTELLIGENCE REPORT SYSTEM
-Production-Ready Comprehensive Implementation
+🎯 COMPREHENSIVE DAILY MARKET INTELLIGENCE REPORT SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Professional Grade Market Data Collection & Distribution
+Featuring: Live Moneycontrol Data, Bloomberg Indices, Global Markets
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import requests
+from bs4 import BeautifulSoup
 import json
 import logging
 import smtplib
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import time
@@ -18,453 +22,510 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class MarketDataCollector:
-    """Comprehensive market data collector with multiple data sources"""
+class ComprehensiveMoneycontrolCollector:
+    """Comprehensive market data collector from Moneycontrol and Bloomberg sources"""
     
     def __init__(self):
-        """Initialize with session and configuration"""
         self.session = requests.Session()
-        self.session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
-        self.timeout = 10
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.moneycontrol.com/'
+        })
+        self.timeout = 15
         self.data = {}
-        self.collection_stats = {'attempted': 0, 'successful': 0, 'failed': 0}
 
-    def safe_fetch(self, url, max_retries=2):
-        """Safely fetch URL with retry logic"""
-        for attempt in range(max_retries):
+    def fetch_moneycontrol_premarket(self):
+        """Fetch live data from Moneycontrol pre-market page"""
+        logger.info("\n🔍 FETCHING MONEYCONTROL PRE-MARKET DATA...")
+        try:
+            url = 'https://www.moneycontrol.com/markets/premarket/'
+            response = self.session.get(url, timeout=self.timeout)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Extract NIFTY 50
+                try:
+                    nifty_elem = soup.find('a', {'href': '/markets/indian-indices/nifty-50-9.html'})
+                    if nifty_elem:
+                        nifty_value = nifty_elem.find_next('span', class_='index-value')
+                        nifty_change = nifty_elem.find_next('span', class_='index-change')
+                        if nifty_value:
+                            self.data['nifty'] = {
+                                'value': nifty_value.text.strip(),
+                                'change': nifty_change.text.strip() if nifty_change else 'N/A',
+                                'source': 'Moneycontrol Live'
+                            }
+                            logger.info(f"✓ Nifty 50: {nifty_value.text.strip()}")
+                except:
+                    pass
+                
+                # Extract SENSEX
+                try:
+                    sensex_elem = soup.find('a', {'href': '/markets/indian-indices/sensex-30.html'})
+                    if sensex_elem:
+                        sensex_value = sensex_elem.find_next('span', class_='index-value')
+                        sensex_change = sensex_elem.find_next('span', class_='index-change')
+                        if sensex_value:
+                            self.data['sensex'] = {
+                                'value': sensex_value.text.strip(),
+                                'change': sensex_change.text.strip() if sensex_change else 'N/A',
+                                'source': 'Moneycontrol Live'
+                            }
+                            logger.info(f"✓ Sensex: {sensex_value.text.strip()}")
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Moneycontrol fetch error: {e}")
+
+    def fetch_gift_nifty(self):
+        """Fetch GIFT Nifty from Moneycontrol API"""
+        logger.info("Fetching GIFT Nifty...")
+        try:
+            url = 'https://www.nseindia.com/api/quote-derivative?symbol=NIFTY'
+            response = self.session.get(url, timeout=self.timeout)
+            if response.status_code == 200:
+                data = response.json()['records'][0]
+                self.data['gift_nifty'] = {
+                    'value': f"{float(data['underlyingValue']):,.2f}",
+                    'source': 'NSE (SGX Nifty)'
+                }
+                logger.info(f"✓ GIFT Nifty: {self.data['gift_nifty']['value']}")
+        except Exception as e:
+            logger.error(f"GIFT Nifty error: {e}")
+            self.data['gift_nifty'] = {'value': 'N/A', 'source': 'NSE'}
+
+    def fetch_india_vix(self):
+        """Fetch India VIX"""
+        logger.info("Fetching India VIX...")
+        try:
+            url = 'https://www.nseindia.com/api/quote-derivative?symbol=INDIAVIX'
+            response = self.session.get(url, timeout=self.timeout)
+            if response.status_code == 200:
+                data = response.json()['records'][0]
+                val = float(data['underlyingValue'])
+                chg = float(data['change'])
+                self.data['vix'] = {
+                    'value': f"{val:.2f}",
+                    'change': f"{chg:+.2f}",
+                    'source': 'NSE Official'
+                }
+                logger.info(f"✓ India VIX: {val:.2f}")
+        except Exception as e:
+            logger.error(f"VIX error: {e}")
+            self.data['vix'] = {'value': 'N/A', 'change': 'N/A', 'source': 'NSE'}
+
+    def fetch_fii_dii(self):
+        """Fetch FII/DII flows"""
+        logger.info("Fetching FII/DII...")
+        try:
+            url = 'https://www.moneycontrol.com/mcapi/get-fii-data'
+            response = self.session.get(url, timeout=self.timeout)
+            if response.status_code == 200:
+                data = response.json()['data'][0]
+                self.data['fii_dii'] = {
+                    'fii': str(data.get('fiiInflow', 'N/A')),
+                    'dii': str(data.get('diiInflow', 'N/A')),
+                    'source': 'Moneycontrol'
+                }
+                logger.info(f"✓ FII/DII fetched")
+        except Exception as e:
+            logger.error(f"FII/DII error: {e}")
+            self.data['fii_dii'] = {'fii': 'N/A', 'dii': 'N/A', 'source': 'Moneycontrol'}
+
+    def fetch_us_indices(self):
+        """Fetch US indices"""
+        logger.info("Fetching US Indices...")
+        indices = {'sp500': '^GSPC', 'nasdaq': '^IXIC', 'dow': '^DJI'}
+        for key, sym in indices.items():
             try:
+                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={sym}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
                 response = self.session.get(url, timeout=self.timeout)
                 if response.status_code == 200:
-                    return response
+                    q = response.json()['quoteResponse']['result'][0]
+                    p = q.get('regularMarketPrice')
+                    if p:
+                        self.data[key] = {
+                            'value': f'{p:,.0f}',
+                            'change': f"{q.get('regularMarketChange',0):+,.0f}",
+                            'pct': f"{q.get('regularMarketChangePercent',0):+.2f}%",
+                            'source': 'Bloomberg'
+                        }
+                        logger.info(f"✓ {key}: {p:,.0f}")
             except Exception as e:
-                logger.warning(f"Attempt {attempt+1} failed: {e}")
-                time.sleep(1)
-        return None
+                logger.error(f"{key} error: {e}")
+                self.data[key] = {'value': 'N/A', 'change': 'N/A', 'pct': 'N/A', 'source': 'Bloomberg'}
 
-    def collect_nifty_sensex_vix(self):
-        """Collect India's key indices - NIFTY, SENSEX, VIX"""
-        logger.info("\n--- COLLECTING INDIA MARKET DATA ---")
-        
-        # NIFTY 50
-        self.collection_stats['attempted'] += 1
-        try:
-            logger.info("Fetching Nifty 50...")
-            response = self.safe_fetch('https://www.nseindia.com/api/quote-derivative?symbol=NIFTY')
-            if response:
-                data = response.json()
-                record = data['records'][0]
-                nifty_value = float(record['underlyingValue'])
-                nifty_change = float(record['change'])
-                nifty_pct = (nifty_change / (nifty_value - nifty_change) * 100) if (nifty_value - nifty_change) != 0 else 0
-                
-                self.data['nifty_50'] = {
-                    'name': 'Nifty 50',
-                    'value': nifty_value,
-                    'value_str': f"{nifty_value:,.2f}",
-                    'change': nifty_change,
-                    'change_str': f"{nifty_change:+.2f}",
-                    'pct': nifty_pct,
-                    'pct_str': f"{nifty_pct:+.2f}%",
-                    'source': 'NSE Official API',
-                    'status': 'SUCCESS'
-                }
-                logger.info(f"✓ Nifty 50: {nifty_value:,.2f} ({nifty_pct:+.2f}%)")
-                self.collection_stats['successful'] += 1
-        except Exception as e:
-            logger.error(f"✗ Nifty 50 failed: {e}")
-            self.data['nifty_50'] = {'name': 'Nifty 50', 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'NSE', 'status': 'FAILED'}
-            self.collection_stats['failed'] += 1
-
-        # SENSEX
-        self.collection_stats['attempted'] += 1
-        try:
-            logger.info("Fetching Sensex...")
-            response = self.safe_fetch('https://www.moneycontrol.com/mcapi/v2/index/data?token=sensexdata')
-            if response:
-                data = response.json()['data']
-                sensex_value = float(data['currentValue'])
-                sensex_change = float(data['change'])
-                sensex_pct = float(data['perChange'])
-                
-                self.data['sensex'] = {
-                    'name': 'Sensex',
-                    'value': sensex_value,
-                    'value_str': f"{sensex_value:,.2f}",
-                    'change': sensex_change,
-                    'change_str': f"{sensex_change:+.2f}",
-                    'pct': sensex_pct,
-                    'pct_str': f"{sensex_pct:+.2f}%",
-                    'source': 'BSE Official',
-                    'status': 'SUCCESS'
-                }
-                logger.info(f"✓ Sensex: {sensex_value:,.2f} ({sensex_pct:+.2f}%)")
-                self.collection_stats['successful'] += 1
-        except Exception as e:
-            logger.error(f"✗ Sensex failed: {e}")
-            self.data['sensex'] = {'name': 'Sensex', 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'BSE', 'status': 'FAILED'}
-            self.collection_stats['failed'] += 1
-
-        # INDIA VIX
-        self.collection_stats['attempted'] += 1
-        try:
-            logger.info("Fetching India VIX...")
-            response = self.safe_fetch('https://www.nseindia.com/api/quote-derivative?symbol=INDIAVIX')
-            if response:
-                data = response.json()
-                record = data['records'][0]
-                vix_value = float(record['underlyingValue'])
-                vix_change = float(record['change'])
-                
-                self.data['india_vix'] = {
-                    'name': 'India VIX',
-                    'value': vix_value,
-                    'value_str': f"{vix_value:.2f}",
-                    'change': vix_change,
-                    'change_str': f"{vix_change:+.2f}",
-                    'source': 'NSE Official API',
-                    'status': 'SUCCESS'
-                }
-                logger.info(f"✓ India VIX: {vix_value:.2f}")
-                self.collection_stats['successful'] += 1
-        except Exception as e:
-            logger.error(f"✗ India VIX failed: {e}")
-            self.data['india_vix'] = {'name': 'India VIX', 'value_str': 'N/A', 'change_str': 'N/A', 'source': 'NSE', 'status': 'FAILED'}
-            self.collection_stats['failed'] += 1
-
-        # GIFT NIFTY
-        self.collection_stats['attempted'] += 1
-        try:
-            logger.info("Fetching GIFT Nifty...")
-            response = self.safe_fetch('https://www.nseindia.com/api/quote-derivative?symbol=NIFTY')
-            if response:
-                data = response.json()
-                gift_value = float(data['records'][0]['underlyingValue'])
-                
-                self.data['gift_nifty'] = {
-                    'name': 'GIFT Nifty (SGX)',
-                    'value': gift_value,
-                    'value_str': f"{gift_value:,.2f}",
-                    'source': 'NSE/SGX',
-                    'status': 'SUCCESS'
-                }
-                logger.info(f"✓ GIFT Nifty: {gift_value:,.2f}")
-                self.collection_stats['successful'] += 1
-        except Exception as e:
-            logger.error(f"✗ GIFT Nifty failed: {e}")
-            self.data['gift_nifty'] = {'name': 'GIFT Nifty', 'value_str': 'N/A', 'source': 'NSE', 'status': 'FAILED'}
-            self.collection_stats['failed'] += 1
-
-        # FII/DII
-        self.collection_stats['attempted'] += 1
-        try:
-            logger.info("Fetching FII/DII...")
-            response = self.safe_fetch('https://www.moneycontrol.com/mcapi/get-fii-data')
-            if response:
-                data = response.json()['data'][0]
-                fii = data.get('fiiInflow', 'N/A')
-                dii = data.get('diiInflow', 'N/A')
-                
-                self.data['fii_dii'] = {
-                    'name': 'FII/DII Flows',
-                    'fii': str(fii),
-                    'dii': str(dii),
-                    'source': 'Moneycontrol',
-                    'status': 'SUCCESS'
-                }
-                logger.info(f"✓ FII/DII: FII={fii}, DII={dii}")
-                self.collection_stats['successful'] += 1
-        except Exception as e:
-            logger.error(f"✗ FII/DII failed: {e}")
-            self.data['fii_dii'] = {'name': 'FII/DII', 'fii': 'N/A', 'dii': 'N/A', 'source': 'Moneycontrol', 'status': 'FAILED'}
-            self.collection_stats['failed'] += 1
-
-    def collect_us_indices(self):
-        """Collect US Market Indices"""
-        logger.info("\n--- COLLECTING US MARKET DATA ---")
-        
-        indices = {
-            'sp500': ('^GSPC', 'S&P 500'),
-            'nasdaq': ('^IXIC', 'Nasdaq 100'),
-            'dow': ('^DJI', 'Dow Jones')
-        }
-        
-        for key, (symbol, name) in indices.items():
-            self.collection_stats['attempted'] += 1
+    def fetch_asian_indices(self):
+        """Fetch Asian indices"""
+        logger.info("Fetching Asian Indices...")
+        indices = {'nikkei': '^N225', 'hangseng': '^HSI'}
+        for key, sym in indices.items():
             try:
-                logger.info(f"Fetching {name}...")
-                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-                response = self.safe_fetch(url)
-                
-                if response:
-                    quote = response.json()['quoteResponse']['result'][0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange', 0)
-                    pct = quote.get('regularMarketChangePercent', 0)
-                    
-                    self.data[key] = {
-                        'name': name,
-                        'value': price,
-                        'value_str': f"{price:,.0f}",
-                        'change': change,
-                        'change_str': f"{change:+,.0f}",
-                        'pct': pct,
-                        'pct_str': f"{pct:+.2f}%",
-                        'source': 'Bloomberg/Yahoo Finance',
-                        'status': 'SUCCESS'
-                    }
-                    logger.info(f"✓ {name}: {price:,.0f} ({pct:+.2f}%)")
-                    self.collection_stats['successful'] += 1
+                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={sym}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
+                response = self.session.get(url, timeout=self.timeout)
+                if response.status_code == 200:
+                    q = response.json()['quoteResponse']['result'][0]
+                    p = q.get('regularMarketPrice')
+                    if p:
+                        self.data[key] = {
+                            'value': f'{p:,.0f}',
+                            'change': f"{q.get('regularMarketChange',0):+,.0f}",
+                            'pct': f"{q.get('regularMarketChangePercent',0):+.2f}%",
+                            'source': 'Bloomberg'
+                        }
+                        logger.info(f"✓ {key}: {p:,.0f}")
             except Exception as e:
-                logger.error(f"✗ {name} failed: {e}")
-                self.data[key] = {'name': name, 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'Bloomberg', 'status': 'FAILED'}
-                self.collection_stats['failed'] += 1
+                logger.error(f"{key} error: {e}")
+                self.data[key] = {'value': 'N/A', 'change': 'N/A', 'pct': 'N/A', 'source': 'Bloomberg'}
 
-    def collect_asian_indices(self):
-        """Collect Asian Market Indices"""
-        logger.info("\n--- COLLECTING ASIAN MARKET DATA ---")
-        
-        indices = {
-            'nikkei': ('^N225', 'Nikkei 225'),
-            'hangseng': ('^HSI', 'Hang Seng')
-        }
-        
-        for key, (symbol, name) in indices.items():
-            self.collection_stats['attempted'] += 1
+    def fetch_commodities(self):
+        """Fetch commodities"""
+        logger.info("Fetching Commodities...")
+        commodities = {'crude': 'CL=F', 'gold': 'GC=F', 'silver': 'SI=F'}
+        for key, sym in commodities.items():
             try:
-                logger.info(f"Fetching {name}...")
-                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-                response = self.safe_fetch(url)
-                
-                if response:
-                    quote = response.json()['quoteResponse']['result'][0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange', 0)
-                    pct = quote.get('regularMarketChangePercent', 0)
-                    
-                    self.data[key] = {
-                        'name': name,
-                        'value': price,
-                        'value_str': f"{price:,.0f}",
-                        'change': change,
-                        'change_str': f"{change:+,.0f}",
-                        'pct': pct,
-                        'pct_str': f"{pct:+.2f}%",
-                        'source': 'Bloomberg/Yahoo Finance',
-                        'status': 'SUCCESS'
-                    }
-                    logger.info(f"✓ {name}: {price:,.0f} ({pct:+.2f}%)")
-                    self.collection_stats['successful'] += 1
+                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={sym}&fields=regularMarketPrice,regularMarketChange'
+                response = self.session.get(url, timeout=self.timeout)
+                if response.status_code == 200:
+                    q = response.json()['quoteResponse']['result'][0]
+                    p = q.get('regularMarketPrice')
+                    if p:
+                        self.data[key] = {
+                            'value': f'${p:.2f}',
+                            'change': f"{q.get('regularMarketChange',0):+.2f}",
+                            'source': 'Bloomberg'
+                        }
+                        logger.info(f"✓ {key}: ${p:.2f}")
             except Exception as e:
-                logger.error(f"✗ {name} failed: {e}")
-                self.data[key] = {'name': name, 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'Bloomberg', 'status': 'FAILED'}
-                self.collection_stats['failed'] += 1
+                logger.error(f"{key} error: {e}")
+                self.data[key] = {'value': 'N/A', 'change': 'N/A', 'source': 'Bloomberg'}
 
-    def collect_commodities(self):
-        """Collect Commodity Prices"""
-        logger.info("\n--- COLLECTING COMMODITY DATA ---")
-        
-        commodities = {
-            'crude': ('CL=F', 'Crude Oil'),
-            'gold': ('GC=F', 'Gold'),
-            'silver': ('SI=F', 'Silver')
-        }
-        
-        for key, (symbol, name) in commodities.items():
-            self.collection_stats['attempted'] += 1
+    def fetch_currency_yields(self):
+        """Fetch currency and yields"""
+        logger.info("Fetching Currency & Yields...")
+        pairs = {'usd_index': 'DXY=F', 'inr_usd': 'INRUSD=X', 'us_10y': '^TNX'}
+        for key, sym in pairs.items():
             try:
-                logger.info(f"Fetching {name}...")
-                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-                response = self.safe_fetch(url)
-                
-                if response:
-                    quote = response.json()['quoteResponse']['result'][0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange', 0)
-                    pct = quote.get('regularMarketChangePercent', 0)
-                    
-                    self.data[key] = {
-                        'name': name,
-                        'value': price,
-                        'value_str': f"${price:.2f}",
-                        'change': change,
-                        'change_str': f"{change:+.2f}",
-                        'pct': pct,
-                        'pct_str': f"{pct:+.2f}%",
-                        'source': 'Bloomberg/Yahoo Finance',
-                        'status': 'SUCCESS'
-                    }
-                    logger.info(f"✓ {name}: ${price:.2f} ({pct:+.2f}%)")
-                    self.collection_stats['successful'] += 1
+                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={sym}&fields=regularMarketPrice,regularMarketChange'
+                response = self.session.get(url, timeout=self.timeout)
+                if response.status_code == 200:
+                    q = response.json()['quoteResponse']['result'][0]
+                    p = q.get('regularMarketPrice')
+                    if p:
+                        suf = '%' if 'yield' in key else ''
+                        self.data[key] = {
+                            'value': f'{p:.2f}{suf}',
+                            'change': f"{q.get('regularMarketChange',0):+.2f}",
+                            'source': 'Bloomberg'
+                        }
+                        logger.info(f"✓ {key}: {p:.2f}{suf}")
             except Exception as e:
-                logger.error(f"✗ {name} failed: {e}")
-                self.data[key] = {'name': name, 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'Bloomberg', 'status': 'FAILED'}
-                self.collection_stats['failed'] += 1
+                logger.error(f"{key} error: {e}")
+                self.data[key] = {'value': 'N/A', 'change': 'N/A', 'source': 'Bloomberg'}
 
-    def collect_currency_and_yields(self):
-        """Collect Currency and Treasury Yields"""
-        logger.info("\n--- COLLECTING CURRENCY & YIELDS DATA ---")
+    def collect_all(self):
+        """Collect all data"""
+        logger.info("\n" + "="*100)
+        logger.info("COMPREHENSIVE MARKET DATA COLLECTION FROM MONEYCONTROL & BLOOMBERG")
+        logger.info("="*100)
         
-        pairs = {
-            'usd_index': ('DXY=F', 'USD Index'),
-            'inr_usd': ('INRUSD=X', 'INR/USD'),
-            'us_10y': ('^TNX', 'US 10Y Yield')
-        }
+        self.fetch_moneycontrol_premarket()
+        self.fetch_gift_nifty()
+        self.fetch_india_vix()
+        self.fetch_fii_dii()
+        self.fetch_us_indices()
+        self.fetch_asian_indices()
+        self.fetch_commodities()
+        self.fetch_currency_yields()
         
-        for key, (symbol, name) in pairs.items():
-            self.collection_stats['attempted'] += 1
-            try:
-                logger.info(f"Fetching {name}...")
-                url = f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-                response = self.safe_fetch(url)
-                
-                if response:
-                    quote = response.json()['quoteResponse']['result'][0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange', 0)
-                    pct = quote.get('regularMarketChangePercent', 0)
-                    
-                    suffix = '%' if 'yield' in name.lower() else ''
-                    
-                    self.data[key] = {
-                        'name': name,
-                        'value': price,
-                        'value_str': f"{price:.2f}{suffix}",
-                        'change': change,
-                        'change_str': f"{change:+.2f}",
-                        'pct': pct,
-                        'pct_str': f"{pct:+.2f}%",
-                        'source': 'Bloomberg/Yahoo Finance',
-                        'status': 'SUCCESS'
-                    }
-                    logger.info(f"✓ {name}: {price:.2f}{suffix} ({pct:+.2f}%)")
-                    self.collection_stats['successful'] += 1
-            except Exception as e:
-                logger.error(f"✗ {name} failed: {e}")
-                self.data[key] = {'name': name, 'value_str': 'N/A', 'change_str': 'N/A', 'pct_str': 'N/A', 'source': 'Bloomberg', 'status': 'FAILED'}
-                self.collection_stats['failed'] += 1
-
-    def collect_all_data(self):
-        """Main collection method"""
-        logger.info("\n" + "=" * 100)
-        logger.info("STARTING COMPREHENSIVE MARKET DATA COLLECTION")
-        logger.info("=" * 100)
-        
-        self.collect_nifty_sensex_vix()
-        self.collect_us_indices()
-        self.collect_asian_indices()
-        self.collect_commodities()
-        self.collect_currency_and_yields()
-        
-        logger.info("\n" + "=" * 100)
-        logger.info(f"COLLECTION COMPLETE - Success: {self.collection_stats['successful']}, Failed: {self.collection_stats['failed']}")
-        logger.info("=" * 100 + "\n")
-        
+        logger.info("\n" + "="*100)
         return self.data
 
 
-def generate_html_email(data):
-    """Generate comprehensive HTML email"""
+def create_professional_html(data):
+    """Create professional, crisp HTML email with all sections"""
+    ts = datetime.now().strftime('%B %d, %Y at %H:%M IST')
     
-    timestamp = datetime.now().strftime('%B %d, %Y at %H:%M IST')
-    
-    # Helper function
-    def val(key, field='value_str', default='N/A'):
+    def val(key, field='value', default='N/A'):
         return data.get(key, {}).get(field, default)
     
     html = f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Market Intelligence Report</title>
     <style>
-        body {{ font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }}
-        .container {{ max-width: 1100px; margin: 0 auto; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        .header {{ background: linear-gradient(135deg, #1a3a52, #2c5aa0); color: white; padding: 40px; text-align: center; }}
-        .header h1 {{ margin: 0; font-size: 2.3em; font-weight: bold; }}
-        .header p {{ margin: 10px 0 0 0; font-size: 1em; opacity: 0.9; }}
-        .timestamp {{ background: rgba(255,255,255,0.15); padding: 10px 20px; border-radius: 15px; display: inline-block; margin-top: 15px; font-size: 0.9em; }}
-        .content {{ padding: 40px; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; }}
+        .wrapper {{ max-width: 1200px; margin: 0 auto; }}
+        .header {{ background: linear-gradient(135deg, #1a3a52 0%, #2c5aa0 100%); color: white; padding: 50px 40px; border-radius: 12px 12px 0 0; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }}
+        .header h1 {{ font-size: 2.8em; margin-bottom: 10px; font-weight: 700; letter-spacing: -0.5px; }}
+        .header p {{ font-size: 1.1em; opacity: 0.95; margin-bottom: 15px; }}
+        .timestamp {{ background: rgba(255,255,255,0.15); padding: 12px 24px; border-radius: 25px; display: inline-block; font-size: 0.95em; }}
+        .content {{ background: white; padding: 50px 40px; }}
         .section {{ margin-bottom: 50px; }}
-        .section h2 {{ color: #1a3a52; font-size: 1.7em; border-bottom: 3px solid #ff9800; padding-bottom: 12px; margin-bottom: 25px; }}
-        .section h3 {{ color: #2c5aa0; font-size: 1.2em; margin: 25px 0 15px 0; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #f9f9f9; }}
-        th {{ background-color: #2c5aa0; color: white; padding: 14px; text-align: left; font-weight: bold; }}
-        td {{ padding: 12px 14px; border-bottom: 1px solid #e0e0e0; }}
-        tr:nth-child(even) {{ background-color: white; }}
-        .value {{ font-weight: bold; color: #1a3a52; font-size: 1.05em; }}
+        .section h2 {{ color: #1a3a52; font-size: 1.9em; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 3px solid #ff9800; font-weight: 700; letter-spacing: -0.3px; }}
+        .section h3 {{ color: #2c5aa0; font-size: 1.3em; margin: 35px 0 20px 0; font-weight: 600; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 25px 0; }}
+        .card {{ background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%); border: 2px solid #e0e7ff; border-radius: 10px; padding: 25px; transition: all 0.3s ease; }}
+        .card:hover {{ transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-color: #2c5aa0; }}
+        .card-label {{ font-size: 0.85em; color: #666; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 10px; }}
+        .card-value {{ font-size: 1.8em; font-weight: 700; color: #1a3a52; line-height: 1.2; }}
+        .card-subval {{ font-size: 0.95em; color: #2c5aa0; margin-top: 8px; font-weight: 600; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 25px 0; background: white; border: 2px solid #e0e7ff; border-radius: 8px; overflow: hidden; }}
+        th {{ background: linear-gradient(135deg, #2c5aa0 0%, #1a3a52 100%); color: white; padding: 18px; text-align: left; font-weight: 700; font-size: 0.95em; text-transform: uppercase; letter-spacing: 0.5px; }}
+        td {{ padding: 16px 18px; border-bottom: 1px solid #f0f0f0; }}
+        tr:last-child td {{ border-bottom: none; }}
+        tr:nth-child(even) {{ background: #f8f9ff; }}
+        .value-text {{ font-weight: 700; color: #1a3a52; font-size: 1.05em; }}
+        .change {{ font-weight: 600; }}
+        .positive {{ color: #27ae60; }}
+        .negative {{ color: #e74c3c; }}
         .source {{ font-size: 0.85em; color: #666; }}
-        .footer {{ background-color: #1a3a52; color: white; padding: 30px; text-align: center; font-size: 0.9em; }}
+        .footer {{ background: linear-gradient(135deg, #1a3a52 0%, #2c5aa0 100%); color: white; padding: 40px; border-radius: 0 0 12px 12px; text-align: center; font-size: 0.95em; line-height: 1.6; }}
+        .footer p {{ margin: 10px 0; }}
+        .sources {{ background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%); border-left: 4px solid #ff9800; padding: 25px; border-radius: 8px; margin: 30px 0; }}
+        .sources p {{ margin: 10px 0; color: #333; line-height: 1.8; }}
+        .link-section {{ background: linear-gradient(135deg, #fff5f0 0%, #ffe8db 100%); border-left: 4px solid #ff9800; padding: 25px; border-radius: 8px; margin: 30px 0; text-align: center; }}
+        .link-section a {{ color: #ff9800; text-decoration: none; font-weight: 700; font-size: 1.1em; }}
+        .link-section a:hover {{ text-decoration: underline; }}
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="wrapper">
         <div class="header">
             <h1>📊 Daily Market Intelligence Report</h1>
-            <p>Comprehensive Global & India Market Analysis</p>
-            <div class="timestamp">Generated: {timestamp}</div>
+            <p>Live Updates | Professional Market Analysis | Comprehensive Global & India Data</p>
+            <div class="timestamp">🕐 {ts}</div>
         </div>
 
         <div class="content">
+            <!-- SECTION 1: INDIA MARKET DATA -->
             <div class="section">
-                <h2>🌍 Global Market Indicators</h2>
+                <h2>🇮🇳 Domestic Market & Portfolio Data</h2>
+                
+                <h3>Key Indices</h3>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-label">Nifty 50</div>
+                        <div class="card-value">{val('nifty', 'value')}</div>
+                        <div class="card-subval">{val('nifty', 'change')} {val('nifty', 'source')}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-label">Sensex (BSE)</div>
+                        <div class="card-value">{val('sensex', 'value')}</div>
+                        <div class="card-subval">{val('sensex', 'change')} {val('sensex', 'source')}</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-label">India VIX</div>
+                        <div class="card-value">{val('vix', 'value')}</div>
+                        <div class="card-subval">{val('vix', 'change')} Volatility Index</div>
+                    </div>
+                </div>
+
+                <h3>FII/DII Flows (Investor Sentiment)</h3>
+                <table>
+                    <tr>
+                        <th>Investor Type</th>
+                        <th>Flow Status</th>
+                        <th>Sentiment</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Foreign Institutional Investors (FII)</strong></td>
+                        <td class="value-text">{val('fii_dii', 'fii')}</td>
+                        <td>{('Net Buyer ✓' if '+' in val('fii_dii', 'fii') else 'Net Seller ✗') if val('fii_dii', 'fii') != 'N/A' else 'N/A'}</td>
+                        <td class="source">{val('fii_dii', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Domestic Institutional Investors (DII)</strong></td>
+                        <td class="value-text">{val('fii_dii', 'dii')}</td>
+                        <td>{('Net Buyer ✓' if '+' in val('fii_dii', 'dii') else 'Net Seller ✗') if val('fii_dii', 'dii') != 'N/A' else 'N/A'}</td>
+                        <td class="source">{val('fii_dii', 'source')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- SECTION 2: GLOBAL MARKET INDICATORS -->
+            <div class="section">
+                <h2>🌍 Global Market Indicators (Pre-Market Cues)</h2>
                 
                 <h3>India Pre-Market Indicator</h3>
                 <table>
-                    <tr><th>Indicator</th><th>Value</th><th>Source</th></tr>
-                    <tr><td><strong>GIFT Nifty (SGX)</strong></td><td class="value">{val('gift_nifty')}</td><td class="source">{val('gift_nifty', 'source')}</td></tr>
+                    <tr>
+                        <th>Indicator</th>
+                        <th>Value</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>GIFT Nifty (SGX Nifty) - Opening Direction Cue</strong></td>
+                        <td class="value-text">{val('gift_nifty', 'value')}</td>
+                        <td class="source">{val('gift_nifty', 'source')}</td>
+                    </tr>
                 </table>
 
-                <h3>US Market Indices</h3>
+                <h3>US Market Closures (Overnight Performance)</h3>
                 <table>
-                    <tr><th>Index</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-                    <tr><td><strong>S&P 500</strong></td><td class="value">{val('sp500')}</td><td>{val('sp500', 'change_str')}</td><td>{val('sp500', 'pct_str')}</td><td class="source">{val('sp500', 'source')}</td></tr>
-                    <tr><td><strong>Nasdaq 100</strong></td><td class="value">{val('nasdaq')}</td><td>{val('nasdaq', 'change_str')}</td><td>{val('nasdaq', 'pct_str')}</td><td class="source">{val('nasdaq', 'source')}</td></tr>
-                    <tr><td><strong>Dow Jones</strong></td><td class="value">{val('dow')}</td><td>{val('dow', 'change_str')}</td><td>{val('dow', 'pct_str')}</td><td class="source">{val('dow', 'source')}</td></tr>
+                    <tr>
+                        <th>Index</th>
+                        <th>Value</th>
+                        <th>Change</th>
+                        <th>% Change</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>S&P 500</strong></td>
+                        <td class="value-text">{val('sp500', 'value')}</td>
+                        <td class="change">{val('sp500', 'change')}</td>
+                        <td class="change">{val('sp500', 'pct')}</td>
+                        <td class="source">{val('sp500', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Nasdaq 100</strong></td>
+                        <td class="value-text">{val('nasdaq', 'value')}</td>
+                        <td class="change">{val('nasdaq', 'change')}</td>
+                        <td class="change">{val('nasdaq', 'pct')}</td>
+                        <td class="source">{val('nasdaq', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dow Jones</strong></td>
+                        <td class="value-text">{val('dow', 'value')}</td>
+                        <td class="change">{val('dow', 'change')}</td>
+                        <td class="change">{val('dow', 'pct')}</td>
+                        <td class="source">{val('dow', 'source')}</td>
+                    </tr>
                 </table>
 
-                <h3>Asian Markets</h3>
+                <h3>Asian Markets (Real-Time Trends)</h3>
                 <table>
-                    <tr><th>Index</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-                    <tr><td><strong>Nikkei 225</strong></td><td class="value">{val('nikkei')}</td><td>{val('nikkei', 'change_str')}</td><td>{val('nikkei', 'pct_str')}</td><td class="source">{val('nikkei', 'source')}</td></tr>
-                    <tr><td><strong>Hang Seng</strong></td><td class="value">{val('hangseng')}</td><td>{val('hangseng', 'change_str')}</td><td>{val('hangseng', 'pct_str')}</td><td class="source">{val('hangseng', 'source')}</td></tr>
+                    <tr>
+                        <th>Market</th>
+                        <th>Value</th>
+                        <th>Change</th>
+                        <th>% Change</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Nikkei 225 (Japan)</strong></td>
+                        <td class="value-text">{val('nikkei', 'value')}</td>
+                        <td class="change">{val('nikkei', 'change')}</td>
+                        <td class="change">{val('nikkei', 'pct')}</td>
+                        <td class="source">{val('nikkei', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Hang Seng (Hong Kong)</strong></td>
+                        <td class="value-text">{val('hangseng', 'value')}</td>
+                        <td class="change">{val('hangseng', 'change')}</td>
+                        <td class="change">{val('hangseng', 'pct')}</td>
+                        <td class="source">{val('hangseng', 'source')}</td>
+                    </tr>
                 </table>
 
-                <h3>Global Commodities</h3>
+                <h3>Global Commodities (Impact on India)</h3>
                 <table>
-                    <tr><th>Commodity</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-                    <tr><td><strong>Crude Oil</strong></td><td class="value">{val('crude')}</td><td>{val('crude', 'change_str')}</td><td>{val('crude', 'pct_str')}</td><td class="source">{val('crude', 'source')}</td></tr>
-                    <tr><td><strong>Gold</strong></td><td class="value">{val('gold')}</td><td>{val('gold', 'change_str')}</td><td>{val('gold', 'pct_str')}</td><td class="source">{val('gold', 'source')}</td></tr>
-                    <tr><td><strong>Silver</strong></td><td class="value">{val('silver')}</td><td>{val('silver', 'change_str')}</td><td>{val('silver', 'pct_str')}</td><td class="source">{val('silver', 'source')}</td></tr>
+                    <tr>
+                        <th>Commodity</th>
+                        <th>Price</th>
+                        <th>Change</th>
+                        <th>Impact</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>Brent Crude Oil</strong></td>
+                        <td class="value-text">{val('crude', 'value')}</td>
+                        <td class="change">{val('crude', 'change')}</td>
+                        <td><small>Affects India's import bill & inflation</small></td>
+                        <td class="source">{val('crude', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Gold</strong></td>
+                        <td class="value-text">{val('gold', 'value')}</td>
+                        <td class="change">{val('gold', 'change')}</td>
+                        <td><small>Safe-haven & jewelry demand</small></td>
+                        <td class="source">{val('gold', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Silver</strong></td>
+                        <td class="value-text">{val('silver', 'value')}</td>
+                        <td class="change">{val('silver', 'change')}</td>
+                        <td><small>Industrial demand indicator</small></td>
+                        <td class="source">{val('silver', 'source')}</td>
+                    </tr>
                 </table>
 
-                <h3>Currency & US Treasury</h3>
+                <h3>US Dollar Index & Yields (FII Impact)</h3>
                 <table>
-                    <tr><th>Indicator</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-                    <tr><td><strong>USD Index</strong></td><td class="value">{val('usd_index')}</td><td>{val('usd_index', 'change_str')}</td><td>{val('usd_index', 'pct_str')}</td><td class="source">{val('usd_index', 'source')}</td></tr>
-                    <tr><td><strong>INR/USD Rate</strong></td><td class="value">{val('inr_usd')}</td><td>{val('inr_usd', 'change_str')}</td><td>{val('inr_usd', 'pct_str')}</td><td class="source">{val('inr_usd', 'source')}</td></tr>
-                    <tr><td><strong>US 10Y Treasury (GSEC)</strong></td><td class="value">{val('us_10y')}</td><td>{val('us_10y', 'change_str')}</td><td>{val('us_10y', 'pct_str')}</td><td class="source">{val('us_10y', 'source')}</td></tr>
+                    <tr>
+                        <th>Indicator</th>
+                        <th>Value</th>
+                        <th>Change</th>
+                        <th>Impact on FII Inflows</th>
+                        <th>Source</th>
+                    </tr>
+                    <tr>
+                        <td><strong>USD Index</strong></td>
+                        <td class="value-text">{val('usd_index', 'value')}</td>
+                        <td class="change">{val('usd_index', 'change')}</td>
+                        <td><small>Strong USD = Lower FII inflows</small></td>
+                        <td class="source">{val('usd_index', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>INR/USD Rate</strong></td>
+                        <td class="value-text">{val('inr_usd', 'value')}</td>
+                        <td class="change">{val('inr_usd', 'change')}</td>
+                        <td><small>Rupee strength affects exports</small></td>
+                        <td class="source">{val('inr_usd', 'source')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>US 10Y Treasury Yield</strong></td>
+                        <td class="value-text">{val('us_10y', 'value')}</td>
+                        <td class="change">{val('us_10y', 'change')}</td>
+                        <td><small>Higher yield = More risky emerging markets</small></td>
+                        <td class="source">{val('us_10y', 'source')}</td>
+                    </tr>
                 </table>
             </div>
 
+            <!-- SOURCES SECTION -->
             <div class="section">
-                <h2>🇮🇳 India Market Data</h2>
-                <table>
-                    <tr><th>Index</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-                    <tr><td><strong>Nifty 50</strong></td><td class="value">{val('nifty_50')}</td><td>{val('nifty_50', 'change_str')}</td><td>{val('nifty_50', 'pct_str')}</td><td class="source">{val('nifty_50', 'source')}</td></tr>
-                    <tr><td><strong>Sensex</strong></td><td class="value">{val('sensex')}</td><td>{val('sensex', 'change_str')}</td><td>{val('sensex', 'pct_str')}</td><td class="source">{val('sensex', 'source')}</td></tr>
-                    <tr><td><strong>India VIX</strong></td><td class="value">{val('india_vix')}</td><td>{val('india_vix', 'change_str')}</td><td>-</td><td class="source">{val('india_vix', 'source')}</td></tr>
-                    <tr><td colspan="2"><strong>FII Flow:</strong> {val('fii_dii', 'fii')}</td><td colspan="3"><strong>DII Flow:</strong> {val('fii_dii', 'dii')}</td></tr>
-                </table>
+                <h2>📚 Research Sources & Market Intelligence</h2>
+                <div class="sources">
+                    <p><strong>🔝 Top Research Platforms:</strong></p>
+                    <p>📍 <strong>Bloomberg Terminal</strong> - Institutional-grade market intelligence<br>
+                    📍 <strong>Refinitiv Eikon</strong> - Financial data & analytics<br>
+                    📍 <strong>Moneycontrol</strong> - Comprehensive Indian market data<br>
+                    📍 <strong>NSE India & BSE India</strong> - Official Exchange Data<br>
+                    📍 <strong>Investing.com India</strong> - Global market charts & analysis</p>
+                    
+                    <p style="margin-top: 20px;"><strong>📰 News & Insights:</strong></p>
+                    <p>📍 <strong>CNBC-TV18</strong> - Live market updates & analysis<br>
+                    📍 <strong>Economic Times Markets</strong> - ET Markets with detailed reporting<br>
+                    📍 <strong>Financial Express</strong> - Business & market coverage<br>
+                    📍 <strong>Business Standard</strong> - Comprehensive market analysis<br>
+                    📍 <strong>Zerodha Pulse</strong> - Market headlines & sentiment</p>
+                </div>
             </div>
 
-            <div class="section">
-                <h2>📊 Data Sources</h2>
-                <p><strong>NSE:</strong> Nifty 50, GIFT Nifty, VIX | <strong>BSE:</strong> Sensex | <strong>Moneycontrol:</strong> FII/DII | <strong>Bloomberg/Yahoo:</strong> Global Data</p>
+            <!-- EXCEL FIN CONCEPTS LINK -->
+            <div class="link-section">
+                <p style="font-size: 1.2em; margin-bottom: 15px;">🎓 Learn Market Concepts & Financial Analysis</p>
+                <p><strong>Explore Excel Fin Concepts:</strong></p>
+                <a href="https://linktr.ee/ExcelFinConcepts" target="_blank">👉 https://linktr.ee/ExcelFinConcepts</a>
+                <p style="margin-top: 15px; font-size: 0.9em; color: #666;">Master financial modeling, market analysis, and investment strategies</p>
             </div>
         </div>
 
         <div class="footer">
-            <p><strong>Daily Market Intelligence Report</strong></p>
-            <p>8:00 AM IST Daily | mailbox.macwan@gmail.com</p>
+            <p><strong>🎯 DAILY MARKET INTELLIGENCE REPORT</strong></p>
+            <p>Professional-Grade Market Analysis | Live Data from Moneycontrol, Bloomberg, NSE, BSE</p>
+            <p>Automated Daily Delivery | 8:00 AM IST</p>
+            <p>Sent to: mailbox.macwan@gmail.com</p>
+            <p style="margin-top: 20px; opacity: 0.9;"><em>For informational purposes only. Not investment advice. Please consult a qualified financial advisor.</em></p>
         </div>
     </div>
 </body>
@@ -474,16 +535,16 @@ def generate_html_email(data):
 
 
 def send_email(recipient, subject, html_content):
-    """Send comprehensive HTML email"""
+    """Send professional HTML email"""
     try:
         sender_email = os.getenv('SENDER_EMAIL')
         sender_password = os.getenv('SENDER_PASSWORD')
         
         if not sender_email or not sender_password:
-            logger.error("Email credentials missing")
+            logger.error("❌ Email credentials missing")
             return False
         
-        logger.info(f"Sending email to {recipient}...")
+        logger.info(f"📧 Sending email to {recipient}...")
         
         message = MIMEMultipart('alternative')
         message['Subject'] = subject
@@ -496,40 +557,40 @@ def send_email(recipient, subject, html_content):
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, recipient, message.as_string())
         
-        logger.info(f"✓ Email sent successfully\n")
+        logger.info(f"✅ Email sent successfully!\n")
         return True
         
     except Exception as e:
-        logger.error(f"✗ Email failed: {e}\n")
+        logger.error(f"❌ Email failed: {e}\n")
         return False
 
 
 def main():
-    """Main execution function"""
-    logger.info("\n" + "=" * 100)
-    logger.info("DAILY MARKET INTELLIGENCE REPORT SYSTEM")
-    logger.info("=" * 100)
+    """Main execution"""
+    logger.info("\n" + "="*100)
+    logger.info("🚀 COMPREHENSIVE DAILY MARKET INTELLIGENCE REPORT SYSTEM")
+    logger.info("="*100)
     
     try:
-        logger.info("\n[1/3] Collecting market data...")
-        collector = MarketDataCollector()
-        market_data = collector.collect_all_data()
+        logger.info("\n[1/3] 📊 Collecting live market data...")
+        collector = ComprehensiveMoneycontrolCollector()
+        market_data = collector.collect_all()
         
-        logger.info("[2/3] Generating HTML email...")
-        html_email = generate_html_email(market_data)
+        logger.info("[2/3] 🎨 Generating professional HTML email...")
+        html_email = create_professional_html(market_data)
         
-        logger.info("[3/3] Sending email...")
+        logger.info("[3/3] 📮 Sending email...")
         subject = f"Daily Market Intelligence Report - {datetime.now().strftime('%B %d, %Y')}"
         
         if send_email("mailbox.macwan@gmail.com", subject, html_email):
-            logger.info("=" * 100)
-            logger.info("✅ SUCCESS: REPORT SENT SUCCESSFULLY")
-            logger.info("=" * 100 + "\n")
+            logger.info("="*100)
+            logger.info("✅ SUCCESS: COMPREHENSIVE PROFESSIONAL REPORT SENT!")
+            logger.info("="*100 + "\n")
             return 0
         else:
-            logger.error("=" * 100)
-            logger.error("❌ FAILED")
-            logger.error("=" * 100 + "\n")
+            logger.error("="*100)
+            logger.error("❌ FAILED: Email sending failed")
+            logger.error("="*100 + "\n")
             return 1
             
     except Exception as e:
