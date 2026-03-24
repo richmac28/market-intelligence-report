@@ -2,7 +2,7 @@ name: Daily Market Intelligence Report
 
 on:
   schedule:
-    # 8:15 AM IST = 2:30 AM UTC (accounting for 5:30 hour difference)
+    # 8:00 AM IST = 2:30 AM UTC (accounting for 5:30 hour difference)
     - cron: '30 2 * * *'
   # Allow manual trigger
   workflow_dispatch:
@@ -25,10 +25,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Market Intelligence Report
+    - name: Run Market Report
       env:
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+        MARKETSTACK_API_KEY: ${{ secrets.MARKETSTACK_API_KEY }}
       run: python main.py
     
     - name: Log execution
