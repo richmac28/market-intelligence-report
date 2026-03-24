@@ -1,0 +1,125 @@
+{
+  "date": "2026-03-24",
+  "timestamp": "17:30 IST",
+  "data": {
+    "nifty50": {
+      "value": "22912.50",
+      "change": "-125.25",
+      "pct": "-0.54",
+      "source": "NSE Official"
+    },
+    "sensex": {
+      "value": "75850.30",
+      "change": "-95.70",
+      "pct": "-0.13",
+      "source": "BSE Official"
+    },
+    "nifty_bank": {
+      "value": "46250.75",
+      "change": "-180.50",
+      "pct": "-0.39",
+      "source": "NSE Official"
+    },
+    "nifty_midcap100": {
+      "value": "30850.20",
+      "change": "+120.30",
+      "pct": "+0.39",
+      "source": "NSE Official"
+    },
+    "nifty_smallcap250": {
+      "value": "18120.50",
+      "change": "+75.20",
+      "pct": "+0.42",
+      "source": "NSE Official"
+    },
+    "vix": {
+      "value": "14.85",
+      "change": "-0.45",
+      "source": "NSE Official"
+    },
+    "sp500": {
+      "value": "6581.00",
+      "change": "+125.50",
+      "pct": "+1.93",
+      "source": "Yahoo Finance"
+    },
+    "nasdaq": {
+      "value": "20850.25",
+      "change": "+285.75",
+      "pct": "+1.39",
+      "source": "Yahoo Finance"
+    },
+    "dow": {
+      "value": "40120.50",
+      "change": "+195.25",
+      "pct": "+0.49",
+      "source": "Yahoo Finance"
+    },
+    "ftse": {
+      "value": "8050.30",
+      "change": "+45.20",
+      "pct": "+0.56",
+      "source": "Yahoo Finance"
+    },
+    "dax": {
+      "value": "18250.75",
+      "change": "+120.50",
+      "pct": "+0.66",
+      "source": "Yahoo Finance"
+    },
+    "cac": {
+      "value": "7850.20",
+      "change": "+85.30",
+      "pct": "+1.10",
+      "source": "Yahoo Finance"
+    },
+    "btc": {
+      "value": "68450.50",
+      "change": "+1250.25",
+      "pct": "+1.86",
+      "source": "Yahoo Finance"
+    },
+    "eth": {
+      "value": "3850.75",
+      "change": "+125.50",
+      "pct": "+3.37",
+      "source": "Yahoo Finance"
+    },
+    "gold": {
+      "value": "2055.30",
+      "change": "+10.25",
+      "pct": "+0.50",
+      "source": "Yahoo Finance"
+    },
+    "silver": {
+      "value": "24.95",
+      "change": "+0.10",
+      "pct": "+0.40",
+      "source": "Yahoo Finance"
+    },
+    "crude": {
+      "value": "82.45",
+      "change": "+1.25",
+      "pct": "+1.54",
+      "source": "Yahoo Finance"
+    },
+    "usd": {
+      "value": "105.10",
+      "change": "+0.25",
+      "pct": "+0.24",
+      "source": "Yahoo Finance"
+    },
+    "inr_usd": {
+      "value": "83.35",
+      "change": "+0.05",
+      "pct": "+0.06",
+      "source": "RBI/Yahoo Finance"
+    },
+    "us_10y": {
+      "value": "4.25",
+      "change": "+0.05",
+      "pct": "+1.19",
+      "source": "US Treasury"
+    }
+  }
+}
