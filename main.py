@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-📊 ROBUST VERSION - Better error handling and multiple fallback methods
+📊 YFINANCE-BASED MARKET INTELLIGENCE REPORT
+Most reliable approach - using yfinance library
 """
 
-import requests
+import yfinance as yf
 import logging
 import smtplib
 import os
@@ -11,334 +12,324 @@ import sys
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import json
 import time
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/tmp/market_report.log')
-    ]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class RobustMarketCollector:
-    """Robust collector with better error handling"""
+class YfinanceMarketCollector:
+    """Using yfinance library - most reliable"""
     
     def __init__(self):
         self.data = {}
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        })
 
-    def fetch_nse_nifty(self):
-        """Fetch Nifty 50 from NSE with detailed error logging"""
-        logger.info("\n" + "="*100)
-        logger.info("FETCHING: Nifty 50 (NSE)")
-        logger.info("="*100)
-        
+    def fetch_index(self, symbol, display_name):
+        """Fetch any index using yfinance"""
         try:
-            url = 'https://www.nseindia.com/api/quote-derivative?symbol=NIFTY'
-            logger.info(f"URL: {url}")
-            logger.info("Sending request (timeout: 30 seconds)...")
+            logger.info(f"Fetching {display_name} ({symbol})...")
             
-            r = self.session.get(url, timeout=30)
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
             
-            logger.info(f"Response Status: {r.status_code}")
-            logger.info(f"Response Headers: {dict(r.headers)}")
+            # yfinance returns currentPrice or regularMarketPrice
+            price = info.get('currentPrice') or info.get('regularMarketPrice')
             
-            if r.status_code == 200:
-                try:
-                    data = r.json()
-                    logger.info(f"Response JSON received: {len(json.dumps(data))} characters")
-                    logger.info(f"Response keys: {list(data.keys())}")
-                    
-                    if 'records' in data and len(data['records']) > 0:
-                        record = data['records'][0]
-                        logger.info(f"Record keys: {list(record.keys())}")
-                        
-                        # Log all values
-                        for key in record.keys():
-                            logger.info(f"  {key}: {record[key]}")
-                        
-                        # Try to extract
-                        val = float(record.get('underlyingValue', 0))
-                        chg = float(record.get('change', 0))
-                        pct = float(record.get('percentChange', 0))
-                        
-                        self.data['nifty50'] = {
-                            'value': f'{val:,.2f}',
-                            'change': f'{chg:+.2f}',
-                            'pct': f'{pct:+.2f}%',
-                            'source': 'NSE'
-                        }
-                        logger.info(f"✓ SUCCESS: Nifty 50 = {val}")
-                        return True
-                    else:
-                        logger.warning("No records found in response")
-                        return False
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error: {e}")
-                    logger.error(f"Response text: {r.text[:500]}")
-                    return False
+            if price:
+                logger.info(f"✓ {display_name}: {price}")
+                return price
             else:
-                logger.error(f"HTTP Error {r.status_code}")
-                logger.error(f"Response: {r.text[:500]}")
-                return False
+                logger.warning(f"Could not get price for {display_name}")
+                return None
                 
-        except requests.exceptions.Timeout:
-            logger.error("REQUEST TIMEOUT - Server took too long to respond")
-            return False
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"CONNECTION ERROR: {e}")
-            return False
         except Exception as e:
-            logger.error(f"EXCEPTION: {type(e).__name__}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
-    def fetch_yahoo_sp500(self):
-        """Fetch S&P 500 from Yahoo Finance with detailed error logging"""
-        logger.info("\n" + "="*100)
-        logger.info("FETCHING: S&P 500 (Yahoo Finance)")
-        logger.info("="*100)
-        
-        try:
-            url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=^GSPC&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-            logger.info(f"URL: {url}")
-            logger.info("Sending request (timeout: 30 seconds)...")
-            
-            r = self.session.get(url, timeout=30)
-            
-            logger.info(f"Response Status: {r.status_code}")
-            logger.info(f"Response Headers: {dict(r.headers)}")
-            
-            if r.status_code == 200:
-                try:
-                    data = r.json()
-                    logger.info(f"Response JSON received: {len(json.dumps(data))} characters")
-                    logger.info(f"Response keys: {list(data.keys())}")
-                    
-                    if 'quoteResponse' in data:
-                        logger.info(f"quoteResponse keys: {list(data['quoteResponse'].keys())}")
-                        
-                        results = data['quoteResponse'].get('result', [])
-                        logger.info(f"Number of results: {len(results)}")
-                        
-                        if len(results) > 0:
-                            quote = results[0]
-                            logger.info(f"Quote keys: {list(quote.keys())}")
-                            
-                            # Log all values
-                            for key in quote.keys():
-                                logger.info(f"  {key}: {quote[key]}")
-                            
-                            # Try to extract
-                            price = quote.get('regularMarketPrice')
-                            change = quote.get('regularMarketChange')
-                            pct = quote.get('regularMarketChangePercent')
-                            
-                            if price is not None:
-                                self.data['sp500'] = {
-                                    'value': f'{float(price):,.2f}',
-                                    'change': f'{float(change):+.2f}',
-                                    'pct': f'{float(pct):+.2f}%',
-                                    'source': 'Yahoo Finance'
-                                }
-                                logger.info(f"✓ SUCCESS: S&P 500 = {price}")
-                                return True
-                            else:
-                                logger.warning("regularMarketPrice is None")
-                                return False
-                        else:
-                            logger.warning("No results in quoteResponse")
-                            return False
-                    else:
-                        logger.warning("No quoteResponse in data")
-                        logger.info(f"Data keys: {list(data.keys())}")
-                        return False
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error: {e}")
-                    logger.error(f"Response text: {r.text[:500]}")
-                    return False
-            else:
-                logger.error(f"HTTP Error {r.status_code}")
-                logger.error(f"Response: {r.text[:500]}")
-                return False
-                
-        except requests.exceptions.Timeout:
-            logger.error("REQUEST TIMEOUT - Server took too long to respond")
-            return False
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"CONNECTION ERROR: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"EXCEPTION: {type(e).__name__}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
-    def fetch_yahoo_nasdaq(self):
-        """Fetch Nasdaq from Yahoo Finance"""
-        logger.info("\n" + "="*100)
-        logger.info("FETCHING: Nasdaq 100 (Yahoo Finance)")
-        logger.info("="*100)
-        
-        try:
-            url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=^IXIC&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-            logger.info(f"URL: {url}")
-            logger.info("Sending request (timeout: 30 seconds)...")
-            
-            r = self.session.get(url, timeout=30)
-            logger.info(f"Response Status: {r.status_code}")
-            
-            if r.status_code == 200:
-                data = r.json()
-                logger.info(f"Response received successfully")
-                
-                results = data.get('quoteResponse', {}).get('result', [])
-                if len(results) > 0:
-                    quote = results[0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange')
-                    pct = quote.get('regularMarketChangePercent')
-                    
-                    if price is not None:
-                        self.data['nasdaq'] = {
-                            'value': f'{float(price):,.2f}',
-                            'change': f'{float(change):+.2f}',
-                            'pct': f'{float(pct):+.2f}%',
-                            'source': 'Yahoo Finance'
-                        }
-                        logger.info(f"✓ SUCCESS: Nasdaq = {price}")
-                        return True
-            
-            logger.warning("Failed to fetch Nasdaq")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error fetching Nasdaq: {e}")
-            return False
-
-    def fetch_yahoo_dow(self):
-        """Fetch Dow Jones from Yahoo Finance"""
-        logger.info("\n" + "="*100)
-        logger.info("FETCHING: Dow Jones (Yahoo Finance)")
-        logger.info("="*100)
-        
-        try:
-            url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=^DJI&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent'
-            logger.info(f"URL: {url}")
-            
-            r = self.session.get(url, timeout=30)
-            logger.info(f"Response Status: {r.status_code}")
-            
-            if r.status_code == 200:
-                data = r.json()
-                results = data.get('quoteResponse', {}).get('result', [])
-                
-                if len(results) > 0:
-                    quote = results[0]
-                    price = quote.get('regularMarketPrice')
-                    change = quote.get('regularMarketChange')
-                    pct = quote.get('regularMarketChangePercent')
-                    
-                    if price is not None:
-                        self.data['dow'] = {
-                            'value': f'{float(price):,.2f}',
-                            'change': f'{float(change):+.2f}',
-                            'pct': f'{float(pct):+.2f}%',
-                            'source': 'Yahoo Finance'
-                        }
-                        logger.info(f"✓ SUCCESS: Dow = {price}")
-                        return True
-            
-            logger.warning("Failed to fetch Dow")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error fetching Dow: {e}")
-            return False
+            logger.error(f"Error fetching {display_name}: {e}")
+            return None
 
     def collect_all(self):
-        """Collect all data"""
+        """Collect all data using yfinance"""
         logger.info("\n" + "="*100)
-        logger.info("STARTING DATA COLLECTION")
+        logger.info("COLLECTING DATA WITH YFINANCE")
         logger.info("="*100)
         
-        self.fetch_nse_nifty()
-        time.sleep(2)
-        self.fetch_yahoo_sp500()
-        time.sleep(2)
-        self.fetch_yahoo_nasdaq()
-        time.sleep(2)
-        self.fetch_yahoo_dow()
+        # Indian Indices
+        logger.info("\n--- INDIAN INDICES ---")
+        nifty50 = self.fetch_index('^NSEI', 'Nifty 50')
+        if nifty50:
+            self.data['nifty50'] = {'value': f'{nifty50:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        sensex = self.fetch_index('^BSESN', 'Sensex')
+        if sensex:
+            self.data['sensex'] = {'value': f'{sensex:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        nifty_bank = self.fetch_index('^NSEBANK', 'Nifty Bank')
+        if nifty_bank:
+            self.data['nifty_bank'] = {'value': f'{nifty_bank:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        vix = self.fetch_index('^VIX', 'India VIX')
+        if vix:
+            self.data['vix'] = {'value': f'{vix:.2f}', 'source': 'Yfinance'}
+        
+        # US Indices
+        logger.info("\n--- US INDICES ---")
+        sp500 = self.fetch_index('^GSPC', 'S&P 500')
+        if sp500:
+            self.data['sp500'] = {'value': f'{sp500:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        nasdaq = self.fetch_index('^IXIC', 'Nasdaq 100')
+        if nasdaq:
+            self.data['nasdaq'] = {'value': f'{nasdaq:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        dow = self.fetch_index('^DJI', 'Dow Jones')
+        if dow:
+            self.data['dow'] = {'value': f'{dow:,.2f}', 'source': 'Yfinance'}
+        
+        # Europe Indices
+        logger.info("\n--- EUROPE INDICES ---")
+        ftse = self.fetch_index('^FTSE', 'FTSE 100')
+        if ftse:
+            self.data['ftse'] = {'value': f'{ftse:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        dax = self.fetch_index('^GDAXI', 'DAX')
+        if dax:
+            self.data['dax'] = {'value': f'{dax:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        cac = self.fetch_index('^FCHI', 'CAC 40')
+        if cac:
+            self.data['cac'] = {'value': f'{cac:,.2f}', 'source': 'Yfinance'}
+        
+        # Cryptocurrency
+        logger.info("\n--- CRYPTOCURRENCY ---")
+        btc = self.fetch_index('BTC-USD', 'Bitcoin')
+        if btc:
+            self.data['btc'] = {'value': f'${btc:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        eth = self.fetch_index('ETH-USD', 'Ethereum')
+        if eth:
+            self.data['eth'] = {'value': f'${eth:,.2f}', 'source': 'Yfinance'}
+        
+        # Commodities
+        logger.info("\n--- COMMODITIES ---")
+        gold = self.fetch_index('GC=F', 'Gold')
+        if gold:
+            self.data['gold'] = {'value': f'${gold:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        silver = self.fetch_index('SI=F', 'Silver')
+        if silver:
+            self.data['silver'] = {'value': f'${silver:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        crude = self.fetch_index('CL=F', 'Crude Oil')
+        if crude:
+            self.data['crude'] = {'value': f'${crude:,.2f}', 'source': 'Yfinance'}
+        
+        # Currency
+        logger.info("\n--- CURRENCY ---")
+        usd = self.fetch_index('DXY=F', 'USD Index')
+        if usd:
+            self.data['usd'] = {'value': f'{usd:,.2f}', 'source': 'Yfinance'}
+        
+        time.sleep(1)
+        
+        inr_usd = self.fetch_index('INRUSD=X', 'INR/USD')
+        if inr_usd:
+            self.data['inr_usd'] = {'value': f'{inr_usd:,.2f}', 'source': 'Yfinance'}
         
         logger.info("\n" + "="*100)
-        logger.info(f"DATA COLLECTION COMPLETE - Collected {len(self.data)} data points")
-        logger.info("="*100)
+        logger.info(f"Collected {len(self.data)} data points")
+        logger.info("="*100 + "\n")
         
         return self.data
 
 
 def create_html(data):
-    """Create HTML email"""
+    """Create professional HTML email"""
     ts = datetime.now().strftime('%B %d, %Y at %H:%M IST')
     
     html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }}
-        .container {{ max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
-        .header {{ background: linear-gradient(135deg, #1a3a52, #2c5aa0); color: white; padding: 30px; border-radius: 5px; margin-bottom: 30px; }}
-        h1 {{ margin: 0; font-size: 2em; }}
-        .subtitle {{ font-size: 0.9em; margin-top: 10px; opacity: 0.9; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th {{ background: #2c5aa0; color: white; padding: 12px; text-align: left; }}
-        td {{ padding: 12px; border-bottom: 1px solid #ddd; }}
-        tr:nth-child(even) {{ background: #f9f9f9; }}
-        .value {{ font-weight: bold; color: #1a3a52; }}
-        .footer {{ background: #2c5aa0; color: white; padding: 20px; text-align: center; border-radius: 5px; margin-top: 30px; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea, #764ba2); padding: 20px; }}
+        .wrapper {{ max-width: 1200px; margin: 0 auto; }}
+        .header {{ background: linear-gradient(135deg, #1a3a52, #2c5aa0); color: white; padding: 50px 40px; border-radius: 12px 12px 0 0; text-align: center; }}
+        .header h1 {{ font-size: 2.8em; margin-bottom: 10px; font-weight: 700; }}
+        .timestamp {{ background: rgba(255,255,255,0.15); padding: 10px 20px; border-radius: 20px; display: inline-block; margin-top: 15px; font-size: 0.95em; }}
+        .content {{ background: white; padding: 50px 40px; }}
+        .section {{ margin-bottom: 50px; }}
+        .section h2 {{ color: #1a3a52; font-size: 1.9em; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 3px solid #ff9800; font-weight: 700; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 25px 0; border: 2px solid #e0e7ff; border-radius: 8px; overflow: hidden; }}
+        th {{ background: linear-gradient(135deg, #2c5aa0, #1a3a52); color: white; padding: 18px; text-align: left; font-weight: 700; text-transform: uppercase; font-size: 0.95em; }}
+        td {{ padding: 16px 18px; border-bottom: 1px solid #f0f0f0; }}
+        tr:nth-child(even) {{ background: #f8f9ff; }}
+        .value {{ font-weight: 700; color: #1a3a52; font-size: 1.1em; }}
+        .footer {{ background: linear-gradient(135deg, #1a3a52, #2c5aa0); color: white; padding: 40px; border-radius: 0 0 12px 12px; text-align: center; font-size: 0.95em; }}
+        .footer p {{ margin: 10px 0; }}
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="wrapper">
         <div class="header">
             <h1>📊 Daily Market Intelligence Report</h1>
-            <div class="subtitle">{ts}</div>
+            <p>Global Markets | Live Data</p>
+            <div class="timestamp">{ts}</div>
         </div>
-        
-        <h2>Market Data</h2>
-        <table>
-            <tr><th>Index</th><th>Value</th><th>Change</th><th>% Change</th><th>Source</th></tr>
-"""
-    
-    # Add data rows
-    for key, values in data.items():
-        if isinstance(values, dict) and 'value' in values:
-            html += f"""
-            <tr>
-                <td><strong>{key.upper()}</strong></td>
-                <td class="value">{values.get('value', 'N/A')}</td>
-                <td>{values.get('change', 'N/A')}</td>
-                <td>{values.get('pct', 'N/A')}</td>
-                <td>{values.get('source', 'N/A')}</td>
-            </tr>
-"""
-    
-    html += """
-        </table>
-        
+
+        <div class="content">
+            <!-- INDIAN MARKET -->
+            <div class="section">
+                <h2>🇮🇳 Indian Market</h2>
+                <table>
+                    <tr><th>Index</th><th>Value</th><th>Source</th></tr>
+                    <tr>
+                        <td><strong>Nifty 50</strong></td>
+                        <td class="value">{data.get('nifty50', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('nifty50', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Sensex</strong></td>
+                        <td class="value">{data.get('sensex', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('sensex', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Nifty Bank</strong></td>
+                        <td class="value">{data.get('nifty_bank', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('nifty_bank', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>India VIX</strong></td>
+                        <td class="value">{data.get('vix', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('vix', {}).get('source', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- US MARKET -->
+            <div class="section">
+                <h2>🇺🇸 US Market</h2>
+                <table>
+                    <tr><th>Index</th><th>Value</th><th>Source</th></tr>
+                    <tr>
+                        <td><strong>S&P 500</strong></td>
+                        <td class="value">{data.get('sp500', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('sp500', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Nasdaq 100</strong></td>
+                        <td class="value">{data.get('nasdaq', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('nasdaq', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dow Jones</strong></td>
+                        <td class="value">{data.get('dow', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('dow', {}).get('source', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- EUROPE MARKET -->
+            <div class="section">
+                <h2>🇪🇺 Europe Market</h2>
+                <table>
+                    <tr><th>Index</th><th>Country</th><th>Value</th><th>Source</th></tr>
+                    <tr>
+                        <td><strong>FTSE 100</strong></td>
+                        <td>UK</td>
+                        <td class="value">{data.get('ftse', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('ftse', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>DAX</strong></td>
+                        <td>Germany</td>
+                        <td class="value">{data.get('dax', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('dax', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CAC 40</strong></td>
+                        <td>France</td>
+                        <td class="value">{data.get('cac', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('cac', {}).get('source', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- CRYPTOCURRENCY -->
+            <div class="section">
+                <h2>₿ Cryptocurrency</h2>
+                <table>
+                    <tr><th>Asset</th><th>Price</th><th>Source</th></tr>
+                    <tr>
+                        <td><strong>Bitcoin</strong></td>
+                        <td class="value">{data.get('btc', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('btc', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Ethereum</strong></td>
+                        <td class="value">{data.get('eth', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('eth', {}).get('source', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- COMMODITIES & CURRENCY -->
+            <div class="section">
+                <h2>💎 Commodities & Currency</h2>
+                <table>
+                    <tr><th>Asset</th><th>Price</th><th>Source</th></tr>
+                    <tr>
+                        <td><strong>Gold</strong></td>
+                        <td class="value">{data.get('gold', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('gold', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Silver</strong></td>
+                        <td class="value">{data.get('silver', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('silver', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Crude Oil</strong></td>
+                        <td class="value">{data.get('crude', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('crude', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>USD Index</strong></td>
+                        <td class="value">{data.get('usd', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('usd', {}).get('source', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>INR/USD</strong></td>
+                        <td class="value">{data.get('inr_usd', {}).get('value', 'N/A')}</td>
+                        <td>{data.get('inr_usd', {}).get('source', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
         <div class="footer">
             <p><strong>Daily Market Intelligence Report</strong></p>
-            <p>8:00 AM IST | mailbox.macwan@gmail.com</p>
+            <p>Live Data from Yfinance</p>
+            <p>8:00 AM IST Daily | mailbox.macwan@gmail.com</p>
         </div>
     </div>
 </body>
@@ -357,7 +348,7 @@ def send_email(recipient, subject, html_content):
             logger.error("Email credentials missing")
             return False
         
-        logger.info("Preparing to send email...")
+        logger.info("Sending email...")
         
         message = MIMEMultipart('alternative')
         message['Subject'] = subject
@@ -365,7 +356,6 @@ def send_email(recipient, subject, html_content):
         message['To'] = recipient
         message.attach(MIMEText(html_content, 'html', 'utf-8'))
         
-        logger.info(f"Connecting to SMTP server...")
         with smtplib.SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
             server.login(sender_email, sender_password)
@@ -376,38 +366,32 @@ def send_email(recipient, subject, html_content):
         
     except Exception as e:
         logger.error(f"Email error: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
         return False
 
 
 def main():
     logger.info("\n" + "="*100)
-    logger.info("ROBUST MARKET INTELLIGENCE REPORT SYSTEM")
+    logger.info("MARKET INTELLIGENCE REPORT - YFINANCE VERSION")
     logger.info("="*100)
     
     try:
         logger.info("\n[1/2] Collecting market data...")
-        collector = RobustMarketCollector()
+        collector = YfinanceMarketCollector()
         market_data = collector.collect_all()
         
-        logger.info("\n[2/2] Generating and sending email...")
-        logger.info(f"Collected {len(market_data)} data points: {list(market_data.keys())}")
-        
+        logger.info("[2/2] Sending email...")
         html_email = create_html(market_data)
         subject = f"Daily Market Intelligence Report - {datetime.now().strftime('%B %d, %Y')}"
         
         if send_email("mailbox.macwan@gmail.com", subject, html_email):
             logger.info("="*100)
-            logger.info("✅ COMPLETE SUCCESS!")
+            logger.info("✅ SUCCESS!")
             logger.info("="*100 + "\n")
             return 0
-        
-        logger.error("Failed to send email")
         return 1
             
     except Exception as e:
-        logger.error(f"\n❌ CRITICAL ERROR: {e}\n")
+        logger.error(f"\n❌ ERROR: {e}\n")
         import traceback
         logger.error(traceback.format_exc())
         return 1
